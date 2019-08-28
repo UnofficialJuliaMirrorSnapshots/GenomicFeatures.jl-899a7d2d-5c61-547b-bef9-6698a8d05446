@@ -1,0 +1,17 @@
+freebsd_instance:
+  image: freebsd-11-2-release-amd64
+task:
+  name: FreeBSD
+  env:
+    matrix:
+      - JULIA_VERSION: "1.1"
+      - JULIA_VERSION: "1.2"
+      - JULIA_VERSION: "nightly"
+  install_script:
+    - sh -c "$(fetch https://raw.githubusercontent.com/ararslan/CirrusCI.jl/master/bin/install.sh -o -)"
+    # - julia -e 'using Pkg.Registry; Registry.add(Registry.RegistrySpec(url = "https://github.com/JuliaRegistries/General.git"))'
+    - julia -e 'using Pkg.Registry; Registry.add(Registry.RegistrySpec(url = "https://github.com/BioJulia/BioJuliaRegistry.git"))'
+  build_script:
+    - cirrusjl build
+  test_script:
+    - cirrusjl test
