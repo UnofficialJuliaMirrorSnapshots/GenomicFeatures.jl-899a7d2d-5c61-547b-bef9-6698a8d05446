@@ -9,16 +9,14 @@
 """
     coverage(intervals)
 
-Compute the coverage of a collection of intervals and return an
-`IntervalCollection` that contains run-length encoded coverage data.
+Compute the coverage of a collection of intervals and return an `IntervalCollection` that contains run-length encoded coverage data.
 
 For example, given intervals like:
 
     [------]     [------------]
        [---------------]
 
-This function would return a new set of disjoint intervals with annotated
-coverage like:
+This function would return a new set of disjoint intervals with annotated coverage like:
 
     [1][-2-][-1-][--2--][--1--]
 """

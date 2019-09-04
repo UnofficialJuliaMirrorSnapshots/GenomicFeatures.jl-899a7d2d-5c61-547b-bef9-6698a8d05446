@@ -1,12 +1,15 @@
 ## Documentation: http://docs.travis-ci.com/user/languages/julia/
 language: julia
+
 os:
   - linux
   - osx
+
 julia:
   - 1.1
   - 1.2
   - nightly
+
 notifications:
   email: false
 
@@ -14,12 +17,12 @@ matrix:
  allow_failures:
  - julia: nightly
 
-codecov: true
-coveralls: false
-
 before_script:
   - julia -e 'using Pkg.Registry; Registry.add(Registry.RegistrySpec(url = "https://github.com/JuliaRegistries/General.git"))'
   - julia -e 'using Pkg.Registry; Registry.add(Registry.RegistrySpec(url = "https://github.com/BioJulia/BioJuliaRegistry.git"))'
+
+after_success:
+  - julia --project=coverage/ coverage/coverage.jl
 
 jobs:
   include:
