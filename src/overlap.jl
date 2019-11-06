@@ -9,7 +9,11 @@ struct OverlapIterator{Sa,Sb,F,G}
 end
 
 function Base.eltype(::Type{OverlapIterator{Sa,Sb,F,G}}) where {Sa,Sb,F,G}
-    return Tuple{Interval{metadatatype(Sa)},Interval{metadatatype(Sb)}}
+    return Tuple{GenomicInterval{metadatatype(Sa)},GenomicInterval{metadatatype(Sb)}}
+end
+
+function Base.eltype(::Type{OverlapIterator{Sa,Sb,F,G}}) where {Ia<:AbstractGenomicInterval, Sa<:Union{AbstractVector{Ia},GenomicIntervalCollection{Ia}}, Ib<:AbstractGenomicInterval,Sb<:Union{AbstractVector{Ib},GenomicIntervalCollection{Ib}},F,G}
+    return Tuple{Ia,Ib}
 end
 
 function Base.IteratorSize(::Type{OverlapIterator{Sa,Sb,F,G}}) where {Sa,Sb,F,G}
@@ -22,7 +26,7 @@ end
 Create an iterator of overlapping intervals between `intervals_a` and `intervals_b`.
 
 This function assumes elements of `intervals_a` and `intervals_b` are sorted by its sequence name and left position.
-If the element type is not a subtype of `GenomicFeatures.Interval`, elements are converted to `Interval` objects.
+If the element type is not a subtype of `GenomicFeatures.AbstractGenomicInterval`, elements are converted to `GenomicInterval` objects.
 
 The third optional argument is a function that defines the order of sequence names.
 The default function is `Base.isless`, which is the lexicographical order.
@@ -34,20 +38,23 @@ end
 struct OverlapIteratorState{Sa,Sb,Ta,Tb}
     next_a::Sa
     next_b::Sb
-    queue::Queue{Interval{Tb}}
+    queue::Queue{<:AbstractGenomicInterval{Tb}}
     queue_index::Int
 end
 
-function OverlapIteratorState(
-        Ta::Type, Tb::Type, next_a::Sa, next_b::Sb, queue::Queue, queue_index::Int) where {Sa, Sb}
+function OverlapIteratorState(Ta::Type, Tb::Type, next_a::Sa, next_b::Sb, queue::Queue, queue_index::Int) where {Sa, Sb}
     return OverlapIteratorState{Sa,Sb,Ta,Tb}(next_a, next_b, queue, queue_index)
 end
 
 function OverlapIteratorState(Ta::Type, Tb::Type, next_a::Sa, next_b::Sb) where {Sa, Sb}
-    queue = Queue{Interval{Tb}}()
+    queue = Queue{GenomicInterval{Tb}}()
     return OverlapIteratorState{Sa,Sb,Ta,Tb}(next_a, next_b, queue, 1)
 end
 
+function OverlapIteratorState(Ta::Type, Tb::Type, next_a::Sa, next_b::Sb) where {Sa, Ib<:AbstractGenomicInterval, Sb<:Tuple{Ib, Number}}
+    queue = Queue{Ib}()
+    return OverlapIteratorState{Sa,Sb,Ta,Tb}(next_a, next_b, queue, 1)
+end
 
 function Base.iterate(iter::OverlapIterator)
     next_a = iterate(iter.intervals_a)
@@ -55,7 +62,8 @@ function Base.iterate(iter::OverlapIterator)
 
     Ta = metadatatype(iter.intervals_a)
     Tb = metadatatype(iter.intervals_b)
-    state = OverlapIteratorState(Ta, Tb, next_a, next_b)
+
+    state = OverlapIteratorState(Ta, Tb, next_a, next_b) #TODO: consider doing next_a and next-b conversion here.
 
     return iterate(iter, state)
 end
@@ -81,7 +89,7 @@ function Base.iterate(iter::OverlapIterator, state::OverlapIteratorState{Sa,Sb,T
     end
 
     entry_a, state_a = next_a
-    interval_a = convert(Interval{Ta}, entry_a)
+    interval_a = typeof(entry_a) <: AbstractGenomicInterval{Ta} ? entry_a : convert(GenomicInterval{Ta}, entry_a) #TODO: use AbstractGenomicInterval and retrieve interval type.
 
     while true
         if queue_index > lastindex(state.queue)
@@ -93,13 +101,13 @@ function Base.iterate(iter::OverlapIterator, state::OverlapIteratorState{Sa,Sb,T
                 end
 
                 entry_a, state_a = next_a
-                next_interval_a = convert(Interval{Ta}, entry_a)
+                next_interval_a = typeof(entry_a) <: AbstractGenomicInterval{Ta} ? entry_a : convert(GenomicInterval{Ta}, entry_a) #TODO: use AbstractGenomicInterval and retrieve interval type.
                 check_ordered(interval_a, next_interval_a, iter.isless)
                 interval_a = next_interval_a
                 queue_index = firstindex(state.queue)
             else
                 entry_b, state_b = next_b
-                interval_b = convert(Interval{Tb}, entry_b)
+                interval_b = typeof(entry_b) <: AbstractGenomicInterval{Tb} ? entry_b : convert(GenomicInterval{Tb}, entry_b) #TODO: use AbstractGenomicInterval and retrieve interval type.
                 if !isempty(queue)
                     check_ordered(queue[end], interval_b, iter.isless)
                 end
@@ -108,7 +116,7 @@ function Base.iterate(iter::OverlapIterator, state::OverlapIteratorState{Sa,Sb,T
             end
         else
             entry_a, state_a = next_a
-            interval_a = convert(Interval{Ta}, entry_a)
+            interval_a = typeof(entry_a) <: AbstractGenomicInterval{Ta} ? entry_a : convert(GenomicInterval{Ta}, entry_a) #TODO: use AbstractGenomicInterval and retrieve interval type.
             interval_b = queue[queue_index]
             c = compare_overlap(interval_a, interval_b, iter.isless)
             queue_index += 1
@@ -120,15 +128,14 @@ function Base.iterate(iter::OverlapIterator, state::OverlapIteratorState{Sa,Sb,T
                     break
                 end
                 entry_a, state_a = next_a
-                next_interval_a = convert(Interval{Ta}, entry_a)
+                next_interval_a = typeof(entry_a) <: AbstractGenomicInterval{Ta} ? entry_a : convert(GenomicInterval{Ta}, entry_a) #TODO: use AbstractGenomicInterval and retrieve interval type.
 
                 check_ordered(interval_a, next_interval_a, iter.isless)
                 interval_a = next_interval_a
                 queue_index = firstindex(state.queue)
             elseif c == 0
                 if iter.filter(interval_a, interval_b)
-                    return ((interval_a, interval_b),
-                        OverlapIteratorState(Ta, Tb, next_a, next_b, queue, queue_index))
+                    return ((interval_a, interval_b), OverlapIteratorState(Ta, Tb, next_a, next_b, queue, queue_index))
                 end
             else
                 if queue_index == firstindex(queue) + 1
@@ -147,7 +154,7 @@ end
 #   -1 when `i1` precedes `i2`,
 #   0 when `i1` overlaps with `i2`, and
 #   +1 when `i1` follows `i2`.
-function compare_overlap(i1::Interval, i2::Interval, isless::Function)
+function compare_overlap(i1::AbstractGenomicInterval, i2::AbstractGenomicInterval, isless::Function)
     if isless(i1.seqname, i2.seqname)::Bool
         return -1
     elseif isless(i2.seqname, i1.seqname)::Bool
@@ -163,9 +170,8 @@ function compare_overlap(i1::Interval, i2::Interval, isless::Function)
     end
 end
 
-# Faster comparison for `Base.isless`.  Note that `Base.isless` must be
-# consistent wtih `Base.cmp` to work correctly.
-function compare_overlap(i1::Interval, i2::Interval, ::typeof(Base.isless))
+# Faster comparison for `Base.isless`.  Note that `Base.isless` must be consistent wtih `Base.cmp` to work correctly.
+function compare_overlap(i1::AbstractGenomicInterval, i2::AbstractGenomicInterval, ::typeof(Base.isless))
     c = cmp(i1.seqname, i2.seqname)
     if c != 0
         return c
