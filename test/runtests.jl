@@ -181,6 +181,34 @@ end
     end
 end
 
+@testset "GenomicPosition" begin
+    @testset "Constructor" begin
+
+        p = GenomicPosition("chr1", 1)
+        @test seqname(p) == "chr1"
+        @test leftposition(p) == 1
+        @test rightposition(p) == 1
+        @test position(p) == 1
+
+        @test GenomicPosition("chr1", 1) == GenomicPosition("chr1", 1:1)
+
+    end
+end
+
+@testset "Broadcastable" begin
+
+    function example(i1::GenomicFeatures.AbstractGenomicInterval, i2::GenomicFeatures.AbstractGenomicInterval)
+        return metadata(i1) * metadata(i2)
+    end
+
+    intervals = GenomicInterval.("chr1", [1:2, 3:4, 5:6], '.', 1:3)
+    @test collect(1:3) .* 2 == example.(intervals, GenomicInterval("chr1", 1:1, '.', 2))
+
+    sites = GenomicPosition.("chr1", 1:3, 1:3)
+    @test collect(1:3) .* 2 == example.(sites, GenomicPosition("chr1", 1, 2))
+
+end
+
 @testset "GenomicIntervalCollection" begin
 
     @testset "Constructor" begin
@@ -202,6 +230,32 @@ end
             push!(ic, interval)
         end
         @test is_all_ordered(collect(GenomicInterval{Int}, ic))
+    end
+
+    @testset "Mixed types" begin
+
+        i = GenomicInterval("chr1", 1,4)
+        p1 = GenomicPosition("chr1", 2)
+        p2 = GenomicPosition("chr1", 5)
+        p3 = GenomicPosition("chr2", 5)
+
+        # Sorting.
+        @test [i, p1, p2, p3] == sort([p2, p1, p3, i])
+
+        # Push out of order mixed types.
+        col = GenomicIntervalCollection{GenomicFeatures.AbstractGenomicInterval{Nothing}}()
+        push!(col, p2)
+        push!(col, p1)
+        push!(col, p3)
+        push!(col, i)
+
+        @test collect(col) == [i, p1, p2, p3]
+
+        # Bulk insertion of mixed types.
+        col = GenomicIntervalCollection([i, p1, p2, p3])
+
+        @test 4 == length(col)
+
     end
 
     @testset "Intersection" begin

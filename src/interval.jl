@@ -8,6 +8,9 @@
 
 abstract type AbstractGenomicInterval{T} <: IntervalTrees.AbstractInterval{Int64} end
 
+# Broadcast.broadcastable(x::AbstractGenomicInterval) = Ref(x) #TODO: move into IntervalTrees?
+Broadcast.broadcastable(x::IntervalTrees.AbstractInterval) = Ref(x) #TODO: move into IntervalTrees?
+
 "A genomic interval specifies interval with some associated metadata."
 struct GenomicInterval{T} <: AbstractGenomicInterval{T}
     seqname::String
@@ -17,12 +20,12 @@ struct GenomicInterval{T} <: AbstractGenomicInterval{T}
     metadata::T
 end
 
-function GenomicInterval(seqname::AbstractString, first::Integer, last::Integer, strand::Union{Strand,Char}=STRAND_BOTH, metadata=nothing)
-    return GenomicInterval{typeof(metadata)}(seqname, first, last, strand, metadata)
+function GenomicInterval(seqname::AbstractString, first::Integer, last::Integer, strand::Union{Strand,Char}=STRAND_BOTH, metadata::T=nothing) where T
+    return GenomicInterval{T}(seqname, first, last, strand, metadata)
 end
 
-function GenomicInterval(seqname::AbstractString, range::UnitRange{T}, strand::Union{Strand,Char}=STRAND_BOTH, metadata=nothing) where T<:Integer
-    return GenomicInterval{typeof(metadata)}(seqname, first(range), last(range), strand, metadata)
+function GenomicInterval(seqname::AbstractString, range::UnitRange{<:Integer}, strand::Union{Strand,Char}=STRAND_BOTH, metadata::T=nothing) where T
+    return GenomicInterval{T}(seqname, first(range), last(range), strand, metadata)
 end
 
 function BioGenerics.seqname(i::AbstractGenomicInterval)
@@ -130,9 +133,10 @@ function precedes(a::AbstractGenomicInterval{T}, b::AbstractGenomicInterval{T}, 
 end
 
 function Base.:(==)(a::AbstractGenomicInterval{T}, b::AbstractGenomicInterval{T}) where T
-    return seqname(a) == seqname(b) &&
-           leftposition(a) == leftposition(b) &&
-           rightposition(a) == rightposition(b)
+    return seqname(a)       == seqname(b) &&
+           leftposition(a)  == leftposition(b) &&
+           rightposition(a) == rightposition(b) &&
+           metadata(a)      == metadata(b)
 end
 
 function Base.:(==)(a::GenomicInterval{T}, b::GenomicInterval{T}) where T
@@ -150,12 +154,13 @@ end
 
 function Base.show(io::IO, i::AbstractGenomicInterval)
     if get(io, :compact, false)
-        print(io, seqname(i), ":", leftposition(i), "-", rightposition(i))
+        print(io, seqname(i), ":", leftposition(i), "-", rightposition(i), "  ", metadata(i) === nothing ? "nothing" : metadata(i))
     else
         println(io, summary(i), ':')
         println(io, "  sequence name: ", seqname(i))
         println(io, "  leftmost position: ", leftposition(i))
-          print(io, "  rightmost position: ", rightposition(i))
+        println(io, "  rightmost position: ", rightposition(i))
+          print(io, "  metadata: ", metadata(i) === nothing ? "nothing" : metadata(i))
     end
 end
 
